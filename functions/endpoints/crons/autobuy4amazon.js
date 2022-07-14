@@ -8,10 +8,11 @@ module.exports = functions.region('asia-northeast1').https.onRequest(async (requ
   const mail = 'saimushi@gmail.com';
   const pass = 'saimushi1721';
   //const asincode = 'B00SAYCXWG';// 「Amazonの他の出品者」(パターン1)のテスト用
-  //const asincode = 'B07GW283KL';// 「Amazonの他の出品者」(パターン2)の一覧上にAmazonのテスト用
+  //const asincode = 'B07GW283KL';// 通常の購入テスト用
   //const asincode = 'B07GW283KL';// 「Amazonの他の出品者」(パターン2)の一覧上にAmazonのテスト用
   //const asincode = 'B00EPZYC0U';// すべての出品を見るテスト用
-  const asincode = 'B09QSHY3MW';// テスト購入用
+  const asincode = 'B0B5WS4MMF';// ドライセン
+
 
   let body = 'end';
   try {
@@ -56,9 +57,28 @@ const checkAmazon = async function (argid, argpass, argitemid) {
       return document.querySelector(selector).textContent.trim();
     }, '#tabular_feature_div .tabular-buybox-text[tabular-attribute-name="販売元"] span');
     console.log('販売元=', seller);
+    //if (-1 < seller.indexOf('鳶色')) {// XXX テスト購入用
     if (0 === seller.indexOf('Amazon')) {
-      console.log('販売元がAmazonなのでそのままワンクリック購入を試みる');
-      //return await onebuyAmazon();
+      // const iselement = await page.evaluate(function(selector) {
+      //   return true;
+      // }, '#buy-now-button');
+      // console.log('販売元がAmazonなのでそのままワンクリック購入を試みる');
+      // if (iselement) {
+      //   return await onebuyAmazon();
+      // }
+      // console.log('ワンクリック購入ボタンが無い');
+      console.log('販売元がAmazonなのでそのまま購入を試みる');
+      const iselement = await page.evaluate(function(selector) {
+        return true;
+      }, '#add-to-cart-button');
+      if (iselement) {
+        await page.evaluate(function(selector) {
+          return document.querySelector(selector).click();
+        }, '#add-to-cart-button');
+        await page.waitForTimeout(1000);
+        console.log('カートに追加 OK');
+        return await buyAmazon();
+      }
     }
     console.log('販売元がAmazonじゃ無い');
   }
@@ -76,9 +96,9 @@ const checkAmazon = async function (argid, argpass, argitemid) {
       return document.querySelector(selector).textContent.trim();
     }, '#aod-pinned-offer #aod-offer-soldBy .a-fixed-left-grid-col.a-col-right a');
     console.log('販売者一覧ヘッダー販売元=', seller);
-    if (0 < seller.indexOf('port town')) {// XXX テスト購入用
-    //if (0 === seller.indexOf('Amazon')) {
-    // if (0 < seller.indexOf('Amazon')) {// XXX このブロック後をテストする時用
+    if (0 === seller.indexOf('Amazon')) {
+    //if (-1 < seller.indexOf('port town')) {// XXX テスト購入用
+    //if (0 < seller.indexOf('Amazon')) {// XXX このブロック後をテストする時用
       console.log('販売者一覧ヘッダーの販売元がAmazonなので購入を試みる');
 
       console.log('販売者一覧ヘッダーからカートに追加');
@@ -130,7 +150,8 @@ const initAmazon = async function () {
   if (browser) {
     return;
   }
-  browser = await puppeteer.launch({ headless: true });
+  browser = await puppeteer.launch({ headless: true, args: ['--disable-web-security', '--disable-features=IsolateOrigins,site-per-process'], });
+  //browser = await puppeteer.launch({ headless: true, });
   page = await browser.newPage();
   await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 7_0 like Mac OSX) AppleWebKit/537.51.1 (KHTML, like Gecko) Version/7.0 Mobile/11A465 Safari/9537.53');
   await page.setViewport({ width: 480, height: 1920, });
@@ -145,7 +166,6 @@ const loginAmazon = async function (argid, argpassd) {
   console.log('ログイン id=', argid);
   await page.goto('https://www.amazon.co.jp/ap/signin?_encoding=UTF8&openid.assoc_handle=jpflex&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select&openid.mode=checkid_setup&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0&openid.ns.pape=http%3A%2F%2Fspecs.openid.net%2Fextensions%2Fpape%2F1.0&openid.pape.max_auth_age=0&openid.return_to=https%3A%2F%2Fwww.amazon.co.jp%2F%3Fref_%3Dnav_signin');
   await page.waitForSelector('form[name="signIn"]');
-  await page.screenshot({ path: 'screenshot.png'});
   await page.evaluate(function(email, passwd) {
     document.querySelector('#ap_email').value = email;
     document.querySelector('#ap_password').value = passwd;
@@ -157,15 +177,54 @@ const loginAmazon = async function (argid, argpassd) {
   return;
 };
 
-const onebuyAmazon = async function () {
-  return false;
-};
+// const onebuyAmazon = async function () {
+//   try {
+//     console.log('今すぐ購入をクリック');
+//     await page.evaluate(function(selector) {
+//       return document.querySelector(selector).click();
+//     }, '#buy-now-button');
+//     //await page.waitForTimeout(2000);
+//     //await page.screenshot({ path: 'screenshot.png'});
+//     //await page.waitForSelector('#turbo-checkout-panel-container');
+//     const elementHandle = await page.waitForSelector('iframe#turbo-checkout-bottom-sheet-frame');
+//     const frame = await elementHandle.contentFrame();
+//     console.log('frame=', frame);
+//     console.log('今すぐ購入をクリック OK');
+//
+//     console.log('注文の確定');
+//     await frame.waitForSelector('#turbo-checkout-pyo-button');
+//     await frame.evaluate(function(selector) {
+//       return document.querySelector(selector).click();
+//     }, '#turbo-checkout-pyo-button');
+//     await page.waitForTimeout(40000);
+//     await page.screenshot({ path: 'screenshot.png'});
+//     console.log('注文完了');
+//
+//     console.log('注文が成功したかどうかをチェック');
+//     const success = await page.evaluate(function(selector) {
+//       return document.querySelector(selector).textContent;
+//     }, '#widget-purchaseConfirmationStatus .a-alert-inline-success');
+//     console.log('success=', success);
+//     if (-1 < success.indexOf('注文が確定')) {
+//       console.log('注文成功');
+//       await page.screenshot({ path: 'screenshot.png'});
+//       return true;
+//     }
+//     console.log('注文失敗');
+//   }
+//   catch (error) {
+//     console.log('注文完了出来す', error);
+//   }
+//   return false;
+// };
 
 const buyAmazon = async function () {
   console.log('カートを表示');
   await page.goto('https://www.amazon.co.jp/gp/aw/c?ref_=navm_hdr_cart');
   await page.waitForSelector('#nav-cart-count');
+  //await page.screenshot({ path: 'screenshot.png'});
   console.log('カートを表示 OK');
+  //return false;
 
   try {
     console.log('レジに進む');
@@ -179,16 +238,17 @@ const buyAmazon = async function () {
     await page.evaluate(function(selector) {
       return document.querySelector(selector).click();
     }, 'input[name="placeYourOrder1"]');
+    await page.waitForSelector('#widget-purchaseConfirmationStatus');
     console.log('注文完了');
-    await page.waitForSelector('#nav-cart-count');
 
     console.log('注文が成功したかどうかをチェック');
     const success = await page.evaluate(function(selector) {
       return document.querySelector(selector).textContent;
-    }, '#widget-purchaseConfirmationStatus .a-alert-inline-success');
+    }, '#widget-purchaseConfirmationStatus');
+    console.log('success=', success);
     if (-1 < success.indexOf('注文が確定')) {
       console.log('注文成功');
-      await page.screenshot({ path: 'screenshot.png'});
+      //await page.screenshot({ path: 'screenshot.png'});
       return true;
     }
     console.log('注文失敗');
