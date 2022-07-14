@@ -9,14 +9,24 @@ module.exports = functions.region('asia-northeast1').https.onRequest(async (requ
   const pass = 'saimushi1721';
   //const asincode = 'B00SAYCXWG';// 「Amazonの他の出品者」(パターン1)のテスト用
   //const asincode = 'B07GW283KL';// 「Amazonの他の出品者」(パターン2)の一覧上にAmazonのテスト用
-  const asincode = 'B07GW283KL';// 「Amazonの他の出品者」(パターン2)の一覧上にAmazonのテスト用
+  //const asincode = 'B07GW283KL';// 「Amazonの他の出品者」(パターン2)の一覧上にAmazonのテスト用
+  //const asincode = 'B00EPZYC0U';// すべての出品を見るテスト用
+  const asincode = 'B09QSHY3MW';// テスト購入用
+
+  let body = 'end';
   try {
-    await checkAmazon(mail, pass, asincode);
+    const res = await checkAmazon(mail, pass, asincode);
+    if (res) {
+      // XXX
+    }
   }
   catch (error) {
-    return response.status(500).end(error.toString());
+    body = error.toString();
   }
-  return response.status(200).end('end');
+  if (browser) {
+    await browser.close();
+  }
+  return response.status(200).end(body);
 });
 
 // module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539 }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
@@ -27,6 +37,9 @@ module.exports = functions.region('asia-northeast1').https.onRequest(async (requ
 //     console.error('error=', error);
 //     return false;
 //   }
+// if (browser) {
+//   await browser.close();
+// }
 //   return false;
 // });
 
@@ -63,12 +76,12 @@ const checkAmazon = async function (argid, argpass, argitemid) {
       return document.querySelector(selector).textContent.trim();
     }, '#aod-pinned-offer #aod-offer-soldBy .a-fixed-left-grid-col.a-col-right a');
     console.log('販売者一覧ヘッダー販売元=', seller);
+    if (0 < seller.indexOf('port town')) {// XXX テスト購入用
     //if (0 === seller.indexOf('Amazon')) {
-    if (0 < seller.indexOf('Amazon')) {
+    // if (0 < seller.indexOf('Amazon')) {// XXX このブロック後をテストする時用
       console.log('販売者一覧ヘッダーの販売元がAmazonなので購入を試みる');
 
       console.log('販売者一覧ヘッダーからカートに追加');
-      // カートに入れる
       await page.evaluate(function(selector) {
         return document.querySelector(selector).click();
       }, '#aod-pinned-offer input[name="submit.addToCart"]');
@@ -96,7 +109,6 @@ const checkAmazon = async function (argid, argpass, argitemid) {
       console.log('販売者一覧にAmazonがあるで購入を試みる 行番号=', (sidx+1));
 
       console.log('販売者一覧からカートに追加');
-      // カートに入れる
       await page.evaluate(function(selector) {
         return document.querySelector(selector).click();
       }, '#aod-offer-list #aod-offer-' + (sidx+1) + ' input[name="submit.addToCart"]');
@@ -110,10 +122,8 @@ const checkAmazon = async function (argid, argpass, argitemid) {
     console.log('販売者一覧がそもそも無い');
   }
 
-  await browser.close();
-
-  // 購入出来ず
-  return false;
+  // 購入出来る状態では無かった
+  return null;
 };
 
 const initAmazon = async function () {
@@ -156,6 +166,35 @@ const buyAmazon = async function () {
   await page.goto('https://www.amazon.co.jp/gp/aw/c?ref_=navm_hdr_cart');
   await page.waitForSelector('#nav-cart-count');
   console.log('カートを表示 OK');
-  await page.screenshot({ path: 'screenshot.png'});
+
+  try {
+    console.log('レジに進む');
+    await page.evaluate(function(selector) {
+      return document.querySelector(selector).click();
+    }, 'input[name="proceedToRetailCheckout"]');
+    await page.waitForSelector('#shipping-summary');
+    console.log('レジに進む OK');
+
+    console.log('注文の確定');
+    await page.evaluate(function(selector) {
+      return document.querySelector(selector).click();
+    }, 'input[name="placeYourOrder1"]');
+    console.log('注文完了');
+    await page.waitForSelector('#nav-cart-count');
+
+    console.log('注文が成功したかどうかをチェック');
+    const success = await page.evaluate(function(selector) {
+      return document.querySelector(selector).textContent;
+    }, '#widget-purchaseConfirmationStatus .a-alert-inline-success');
+    if (-1 < success.indexOf('注文が確定')) {
+      console.log('注文成功');
+      await page.screenshot({ path: 'screenshot.png'});
+      return true;
+    }
+    console.log('注文失敗');
+  }
+  catch (error) {
+    console.log('注文完了出来す', error);
+  }
   return false;
 };
