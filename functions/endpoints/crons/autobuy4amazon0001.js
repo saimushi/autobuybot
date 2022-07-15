@@ -12,7 +12,7 @@ let page = null;
 //   return response.status(200).end(body);
 // });
 
-module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539 }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
+module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539, memory: '256MB' }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
   await autobuyAmazon();
   return true;
 });
