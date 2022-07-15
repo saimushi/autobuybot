@@ -6,7 +6,7 @@ global.production = true;
 
 global.funcs = {
   generateAESKey: './endpoints/operations/generateAESKey',
-  autobuy4amazon: './endpoints/crons/autobuy4amazon',
+  autobuy4amazon0001: './endpoints/crons/autobuy4amazon0001',
 };
 
 // operation/generateAESKeysを使って作成して下さい

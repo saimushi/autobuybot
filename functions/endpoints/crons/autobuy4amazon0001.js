@@ -4,22 +4,80 @@ const puppeteer = require('puppeteer');
 let browser = null;
 let page = null;
 
-module.exports = functions.region('asia-northeast1').https.onRequest(async (request, response) => {
-  const mail = 'saimushi@gmail.com';
-  const pass = 'saimushi1721';
-  //const asincode = 'B00SAYCXWG';// 「Amazonの他の出品者」(パターン1)のテスト用
-  //const asincode = 'B07GW283KL';// 通常の購入テスト用
-  //const asincode = 'B07GW283KL';// 「Amazonの他の出品者」(パターン2)の一覧上にAmazonのテスト用
-  //const asincode = 'B00EPZYC0U';// すべての出品を見るテスト用
-  const asincode = 'B0B5WS4MMF';// ドライセン
+// module.exports = functions.region('asia-northeast1').https.onRequest(async (request, response) => {
+//   const body = await autobuyAmazon();
+//   if (null === body) {
+//     return response.status(404).end('target not found');
+//   }
+//   return response.status(200).end(body);
+// });
 
+module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539 }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
+  await autobuyAmazon();
+  return true;
+});
 
+const autobuyAmazon = async function () {
   let body = 'end';
   try {
-    const res = await checkAmazon(mail, pass, asincode);
-    if (res) {
-      // XXX
+    const asnap = await firestore.collection('amazon').doc(process.env.FUNCTION_TARGET.substr(-4)).get();
+    if (!asnap.exists) {
+      console.log('対象データが無いので即終了');
+      return null;
     }
+    const targetdata = asnap.data();
+    const mail = decryptAESFromUTF8Base64(targetdata.identity);
+    const pass = decryptAESFromUTF8Base64(targetdata.pass);
+    const items = targetdata.items;
+
+    // B07RRK3LGN V2AB
+
+    //const asincode = 'B00SAYCXWG';// 「Amazonの他の出品者」(パターン1)のテスト用
+    //const asincode = 'B07GW283KL';// 通常の購入テスト用
+    //const asincode = 'B07GW283KL';// 「Amazonの他の出品者」(パターン2)の一覧上にAmazonのテスト用
+    //const asincode = 'B00EPZYC0U';// すべての出品を見るテスト用
+
+    const starttime = new Date().getTime();
+    console.log('開始時間=', starttime);
+
+    let targetidx = 0;
+    while (530000 > (new Date().getTime()) - starttime) {
+      console.log('ループ開始', (targetidx+1));
+      let res = null;
+      let item = items[targetidx];
+      if (item) {
+        if (item.buycount < item.usecount) {
+          console.log('購入が完了していないアイテムを検知 行番号' + (targetidx+1), item);
+          res = await checkAmazon(mail, pass, item.id);
+          console.log('res=', res);
+          //if (true === res) {
+          if (null === res) {// テスト用
+            items.buycount = admin.firestore.FieldValue.increment(1);
+            await asnap.ref.update({ items: items });
+          }
+        }
+      }
+      console.log('ループ終了', (targetidx+1));
+      if (null === res) {
+        // 次のアイテムのチェック
+        targetidx++;
+        if (2 < targetidx) {
+          // アイテムは3つまでなので3つのチェックが終わったら30秒待って頭に戻る
+          targetidx = 0;
+          if (500000 > (new Date().getTime()) - starttime) {
+            // 30秒後に再トライ
+            console.log('30秒のインターバルを挟む 次の行番号', (targetidx+1));
+            const timer = await new Promise(function (resolve) {
+              setTimeout(function () {
+                resolve(true);
+              }, 30000);
+            });
+          }
+        }
+      }
+      // XXX 購入の失敗はしつこく再処理するのでidxはインクリメントしない！
+    }
+    console.log('全処理終了');
   }
   catch (error) {
     body = error.toString();
@@ -27,22 +85,8 @@ module.exports = functions.region('asia-northeast1').https.onRequest(async (requ
   if (browser) {
     await browser.close();
   }
-  return response.status(200).end(body);
-});
-
-// module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539 }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
-//   try {
-//     await checkAmazon(mail, pass, asincode);
-//   }
-//   catch (error) {
-//     console.error('error=', error);
-//     return false;
-//   }
-// if (browser) {
-//   await browser.close();
-// }
-//   return false;
-// });
+  return body;
+};
 
 const checkAmazon = async function (argid, argpass, argitemid) {
   await initAmazon();
