@@ -1,23 +1,27 @@
 
+require('../../libraries/notifyLine');
+
 const puppeteer = require('puppeteer');
 
 let browser = null;
 let page = null;
 
-// module.exports = functions.region('asia-northeast1').https.onRequest(async (request, response) => {
-//   const body = await autobuyAmazon();
-//   if (null === body) {
-//     return response.status(404).end('target not found');
-//   }
-//   return response.status(200).end(body);
-// });
-
-module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539, memory: '256MB' }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
-  await autobuyAmazon();
-  return true;
+module.exports = functions.region('asia-northeast1').https.onRequest(async (request, response) => {
+  const body = await autobuyAmazon(10000);
+  if (null === body) {
+    return response.status(404).end('target not found');
+  }
+  return response.status(200).end(body);
 });
 
-const autobuyAmazon = async function () {
+// module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539, memory: '512MB' }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
+//   await autobuyAmazon(530000);
+//   return true;
+// });
+
+let linetoken = null;
+
+const autobuyAmazon = async function (argmaxtime) {
   let body = 'end';
   try {
     const asnap = await firestore.collection('amazon').doc(process.env.FUNCTION_TARGET.substr(-4)).get();
@@ -26,6 +30,9 @@ const autobuyAmazon = async function () {
       return null;
     }
     const targetdata = asnap.data();
+    if (targetdata.linetoken) {
+      linetoken = decryptAESFromUTF8Base64(targetdata.linetoken);
+    }
     const mail = decryptAESFromUTF8Base64(targetdata.identity);
     const pass = decryptAESFromUTF8Base64(targetdata.pass);
     const items = targetdata.items;
@@ -41,7 +48,7 @@ const autobuyAmazon = async function () {
     console.log('開始時間=', starttime);
 
     let targetidx = 0;
-    while (530000 > (new Date().getTime()) - starttime) {
+    while (argmaxtime > (new Date().getTime()) - starttime) {
       console.log('ループ開始', (targetidx+1));
       let res = null;
       let item = items[targetidx];
@@ -92,7 +99,8 @@ const checkAmazon = async function (argid, argpass, argitemid) {
   await initAmazon();
   await loginAmazon(argid, argpass);
 
-  await page.goto('https://www.amazon.co.jp/dp/' + argitemid);
+  let targetURL = 'https://www.amazon.co.jp/dp/' + argitemid;
+  await page.goto(targetURL);
   await page.waitForSelector('#nav-cart-count');
 
   console.log('販売元がAmazonかどうか');
@@ -111,7 +119,10 @@ const checkAmazon = async function (argid, argpass, argitemid) {
       //   return await onebuyAmazon();
       // }
       // console.log('ワンクリック購入ボタンが無い');
+      await notifyLine(linetoken, targetURL + '\nは購入出来る状態です。購入を試みます。');
       console.log('販売元がAmazonなのでそのまま購入を試みる');
+
+      console.log('カートに追加');
       const iselement = await page.evaluate(function(selector) {
         return true;
       }, '#add-to-cart-button');
@@ -121,7 +132,7 @@ const checkAmazon = async function (argid, argpass, argitemid) {
         }, '#add-to-cart-button');
         await page.waitForTimeout(1000);
         console.log('カートに追加 OK');
-        return await buyAmazon();
+        return await buyAmazon(targetURL);
       }
     }
     console.log('販売元がAmazonじゃ無い');
@@ -131,7 +142,7 @@ const checkAmazon = async function (argid, argpass, argitemid) {
   }
 
   console.log('販売元が無いので販売者一覧にAmazonが居ないかチェックする');
-  await page.goto('https://www.amazon.co.jp/dp/' + argitemid + '?tag=isurut-22&linkCode=osi&th=1&psc=1&aod=1');
+  await page.goto(targetURL + '?tag=isurut-22&linkCode=osi&th=1&psc=1&aod=1');
   await page.waitForSelector('#atc-toast-overlay');
 
   console.log('販売者一覧ヘッダーがAmazonかどうか');
@@ -143,6 +154,7 @@ const checkAmazon = async function (argid, argpass, argitemid) {
     if (0 === seller.indexOf('Amazon')) {
     //if (-1 < seller.indexOf('port town')) {// XXX テスト購入用
     //if (0 < seller.indexOf('Amazon')) {// XXX このブロック後をテストする時用
+      await notifyLine(linetoken, targetURL + '\nは購入出来る状態です。購入を試みます。');
       console.log('販売者一覧ヘッダーの販売元がAmazonなので購入を試みる');
 
       console.log('販売者一覧ヘッダーからカートに追加');
@@ -151,7 +163,7 @@ const checkAmazon = async function (argid, argpass, argitemid) {
       }, '#aod-pinned-offer input[name="submit.addToCart"]');
       await page.waitForTimeout(1000);
       console.log('販売者一覧ヘッダーからカートに追加 OK');
-      return await buyAmazon();
+      return await buyAmazon(targetURL);
     }
     console.log('販売者一覧ヘッダーがAmazonじゃ無い');
   }
@@ -170,6 +182,7 @@ const checkAmazon = async function (argid, argpass, argitemid) {
     console.log('販売者一覧=', sellers);
     const sidx = sellers.indexOf('Amazon');
     if (-1 < sidx) {
+      await notifyLine(linetoken, targetURL + '\nは購入出来る状態です。購入を試みます。');
       console.log('販売者一覧にAmazonがあるで購入を試みる 行番号=', (sidx+1));
 
       console.log('販売者一覧からカートに追加');
@@ -178,7 +191,7 @@ const checkAmazon = async function (argid, argpass, argitemid) {
       }, '#aod-offer-list #aod-offer-' + (sidx+1) + ' input[name="submit.addToCart"]');
       await page.waitForTimeout(1000);
       console.log('販売者一覧からカートに追加 OK');
-      return await buyAmazon();
+      return await buyAmazon(targetURL);
     }
     console.log('販売者一覧にAmazonが無い');
   }
@@ -187,6 +200,8 @@ const checkAmazon = async function (argid, argpass, argitemid) {
   }
 
   // 購入出来る状態では無かった
+  //await notifyLine(linetoken, targetURL + '\nは購入出来る状態ではありませんでした。');
+
   return null;
 };
 
@@ -262,7 +277,7 @@ const loginAmazon = async function (argid, argpassd) {
 //   return false;
 // };
 
-const buyAmazon = async function () {
+const buyAmazon = async function (argtargeturl) {
   console.log('カートを表示');
   await page.goto('https://www.amazon.co.jp/gp/aw/c?ref_=navm_hdr_cart');
   await page.waitForSelector('#nav-cart-count');
@@ -284,6 +299,7 @@ const buyAmazon = async function () {
     }, 'input[name="placeYourOrder1"]');
     await page.waitForSelector('#widget-purchaseConfirmationStatus');
     console.log('注文完了');
+    await notifyLine(linetoken, argtargeturl + '\nは注文完了しました。\n成功したかどうか確認して下さい。\nhttps://www.amazon.co.jp/gp/css/order-history?ref_=nav_orders_first');
 
     console.log('注文が成功したかどうかをチェック');
     const success = await page.evaluate(function(selector) {
@@ -300,5 +316,6 @@ const buyAmazon = async function () {
   catch (error) {
     console.log('注文完了出来す', error);
   }
+  await notifyLine(linetoken, argtargeturl + '\nは注文失敗しました。リトライします。\n実際に失敗したかどうか確認して下さい。\nhttps://www.amazon.co.jp/gp/css/order-history?ref_=nav_orders_first');
   return false;
 };
