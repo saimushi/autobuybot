@@ -6,18 +6,18 @@ const puppeteer = require('puppeteer');
 let browser = null;
 let page = null;
 
-module.exports = functions.region('asia-northeast1').https.onRequest(async (request, response) => {
-  const body = await autobuyAmazon(10000);
-  if (null === body) {
-    return response.status(404).end('target not found');
-  }
-  return response.status(200).end(body);
-});
-
-// module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539, memory: '512MB' }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
-//   await autobuyAmazon(530000);
-//   return true;
+// module.exports = functions.region('asia-northeast1').https.onRequest(async (request, response) => {
+//   const body = await autobuyAmazon(10000);
+//   if (null === body) {
+//     return response.status(404).end('target not found');
+//   }
+//   return response.status(200).end(body);
 // });
+
+module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539, memory: '512MB' }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
+  await autobuyAmazon(530000);
+  return true;
+});
 
 let linetoken = null;
 
