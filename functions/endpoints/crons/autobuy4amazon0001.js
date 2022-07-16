@@ -102,8 +102,15 @@ const checkAmazon = async function (argid, argpass, argitemid) {
   await loginAmazon(argid, argpass);
 
   let targetURL = 'https://www.amazon.co.jp/dp/' + argitemid;
-  await page.goto(targetURL);
-  await page.waitForSelector('#nav-cart-count');
+  console.log('商品ページへ移動', targetURL);
+  try {
+    await page.goto(targetURL);
+    await page.waitForSelector('#nav-cart-count');
+    console.log('商品ページ移動 OK');
+  }
+  catch (error) {
+    console.log('商品ページが表示出来ない');
+  }
 
   console.log('販売元がAmazonかどうか');
   try {
