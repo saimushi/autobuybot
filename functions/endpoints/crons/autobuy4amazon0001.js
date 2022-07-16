@@ -6,15 +6,17 @@ const puppeteer = require('puppeteer');
 let browser = null;
 let page = null;
 
+const maxitems = 5;
+
 // module.exports = functions.region('asia-northeast1').https.onRequest(async (request, response) => {
-//   const body = await autobuyAmazon(10000);
+//   const body = await autobuyAmazon(30000);
 //   if (null === body) {
 //     return response.status(404).end('target not found');
 //   }
 //   return response.status(200).end(body);
 // });
 
-module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539, memory: '512MB' }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
+module.exports = functions.region('asia-northeast1').runWith({ timeoutSeconds: 539, memory: '1GB' }).pubsub.schedule('every 9 minutes').onRun(async (context) => {
   await autobuyAmazon(530000);
   return true;
 });
@@ -57,9 +59,9 @@ const autobuyAmazon = async function (argmaxtime) {
           console.log('購入が完了していないアイテムを検知 行番号' + (targetidx+1), item);
           res = await checkAmazon(mail, pass, item.id);
           console.log('res=', res);
-          //if (true === res) {
-          if (null === res) {// テスト用
-            items.buycount = admin.firestore.FieldValue.increment(1);
+          if (true === res) {
+          //if (null === res) {// テスト用
+            items.buycount++;
             await asnap.ref.update({ items: items });
           }
         }
@@ -68,7 +70,7 @@ const autobuyAmazon = async function (argmaxtime) {
       if (null === res) {
         // 次のアイテムのチェック
         targetidx++;
-        if (2 < targetidx) {
+        if ((maxitems-1) < targetidx) {
           // アイテムは3つまでなので3つのチェックが終わったら30秒待って頭に戻る
           targetidx = 0;
           if (500000 > (new Date().getTime()) - starttime) {
@@ -209,17 +211,20 @@ const initAmazon = async function () {
   if (browser) {
     return;
   }
+  console.log('ブラウザ初期化');
   browser = await puppeteer.launch({ headless: true, args: ['--disable-web-security', '--disable-features=IsolateOrigins,site-per-process'], });
   //browser = await puppeteer.launch({ headless: true, });
   page = await browser.newPage();
   await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 7_0 like Mac OSX) AppleWebKit/537.51.1 (KHTML, like Gecko) Version/7.0 Mobile/11A465 Safari/9537.53');
   await page.setViewport({ width: 480, height: 1920, });
+  console.log('ブラウザ初期化 OK');
   return;
 };
 
 let authorized = false;
 const loginAmazon = async function (argid, argpassd) {
   if (authorized) {
+    console.log('ログイン済 スキップ');
     return;
   }
   console.log('ログイン id=', argid);
