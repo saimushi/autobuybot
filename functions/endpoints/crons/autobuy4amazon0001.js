@@ -9,7 +9,7 @@ let page = null;
 const maxitems = 5;
 
 // module.exports = functions.region('asia-northeast1').https.onRequest(async (request, response) => {
-//   const body = await autobuyAmazon(30000);
+//   const body = await autobuyAmazon(60000);
 //   if (null === body) {
 //     return response.status(404).end('target not found');
 //   }
